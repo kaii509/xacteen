@@ -5,37 +5,54 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from openpyxl import load_workbook
 from selenium.common.exceptions import TimeoutException
+from appium.webdriver.common.touch_action import TouchAction
 
-# Declare constants
+# Constants
 APP_PACKAGE = "mn.xacbank.teen"
 EXCEL_PATH = "/Users/khus1en/Documents/Internship Xac/XacTeen/tests/credentials.xlsx"
+icon = chr(0xF002)   # 
 
 @pytest.fixture(scope="module")
 def sheet():
     wb = load_workbook(EXCEL_PATH)
     ws = wb.active
-    ws.cell(row=1, column=3).value = "Result"
+    # Set headers
+    ws.cell(row=1, column=1).value = "Username"
+    ws.cell(row=1, column=2).value = "Password"
+    ws.cell(row=1, column=3).value = "Bank"
+    ws.cell(row=1, column=4).value = "Account"
+    ws.cell(row=1, column=5).value = "PIN"
+    ws.cell(row=1, column=6).value = "Result"
     yield ws
     wb.save(EXCEL_PATH)
     wb.close()
 
 def is_logged_in(driver):
     try:
-        driver.find_element(AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().text("Сүүлийн гүйлгээнүүд")')
+        driver.find_element(
+            AppiumBy.ANDROID_UIAUTOMATOR,
+            'new UiSelector().text("Сүүлийн гүйлгээнүүд")'
+        )
         return True
     except:
         return False
 
 def logout(driver):
-    wait = WebDriverWait(driver, 10)
+    wait = WebDriverWait(driver, 5)
     try:
-        profile_btn = wait.until(EC.presence_of_element_located((AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().className("android.widget.ImageView").instance(3)')))
-        profile_btn.click()
-
-        logout_btn = wait.until(EC.presence_of_element_located((AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().description("Апп-аас гарах")')))
-        logout_btn.click()
-    except Exception as e:
-        print(f"[!] Logout failed: {e}")
+        # open profile
+        wait.until(EC.element_to_be_clickable(
+            (AppiumBy.ANDROID_UIAUTOMATOR,
+             'new UiSelector().className("android.widget.ImageView").instance(3)'))
+        ).click()
+        # click logout
+        wait.until(EC.element_to_be_clickable(
+            (AppiumBy.ANDROID_UIAUTOMATOR,
+             'new UiSelector().description("Апп-аас гарах")'))
+        ).click()
+        time.sleep(1)
+    except Exception:
+        pass
 
 def ensure_login_screen(driver):
     wait = WebDriverWait(driver, 1)
@@ -93,31 +110,98 @@ def ensure_login_screen(driver):
         time.sleep(1)
     except:
         print("[i] Default login screen ready.")
+    
+def enter_pin(driver, pin):
+    wait = WebDriverWait(driver, 5)
+    for digit in str(pin):
+        try:
+            wait.until(EC.presence_of_element_located((
+                AppiumBy.ANDROID_UIAUTOMATOR,
+                f'new UiSelector().text("{digit}")'
+            ))).click()
+            time.sleep(0.2)
+        except Exception:
+            return False
+    return True
+
+def transaction(driver, bank, account, amount, pin, accnf):
+    wait = WebDriverWait(driver, 5)
+    accnf = False
+    
+    try:
+        # 1) go to transfer
+        wait.until(EC.element_to_be_clickable((
+            AppiumBy.ANDROID_UIAUTOMATOR,
+            'new UiSelector().text("Мөнгө илгээх")'
+        ))).click()
+
+        # 2) select bank
+
+        wait.until(EC.element_to_be_clickable((
+            AppiumBy.ANDROID_UIAUTOMATOR,
+            f'new UiSelector().text("{bank}")'
+        ))).click()
+
+        # 3) tap account field
+        account_num = wait.until(EC.element_to_be_clickable((
+            AppiumBy.ANDROID_UIAUTOMATOR,
+            f'new UiSelector().text("Данс, утасны дугаар")'
+        )))
+        account_num.clear()
+        account_num.send_keys(account)
+
+        # Search button 
+        
+        selector = f'new UiSelector().text("{icon}")'
+        search_btn = wait.until(EC.element_to_be_clickable((AppiumBy.ANDROID_UIAUTOMATOR, selector)))
+        search_btn.click()
+
+        if  wait.until(EC.presence_of_element_located((AppiumBy.ANDROID_UIAUTOMATOR,f'new UiSelector().text("Хайлтын үр дүн олдсонгүй. Дансны нэр гараас оруулах боломжтой."))'))):
+            accnf = True
+            return accnf
+            
+        driver.terminate_app(APP_PACKAGE)
+        time.sleep(1)
+        driver.activate_app(APP_PACKAGE)
+        time.sleep(1)
+            
+           
+        
 
 
-def test_login_from_excel(driver, sheet):
-    wait = WebDriverWait(driver, 1)
+    except Exception:
+        return False
+
+def test_l(driver, sheet):
+    wait = WebDriverWait(driver, 3)
     driver.activate_app(APP_PACKAGE)
-    row = 2 # Starting from the second row in the Excel file
+    row = 2
 
     while True:
         ensure_login_screen(driver)
 
-        username = sheet.cell(row=row, column=1).value
-        password = sheet.cell(row=row, column=2).value
+        user = sheet.cell(row=row, column=1).value
+        pwd  = sheet.cell(row=row, column=2).value
+        bank = sheet.cell(row=row, column=3).value
+        acc  = sheet.cell(row=row, column=4).value
+        pin  = sheet.cell(row=row, column=5).value
+        accnf = sheet.cell(row=row, column=6).value
+        amt = 100
+        print(bank)
 
-        if not username or not password:
+        # stop when empty
+        if not user or not pwd:
             break
 
-        # Enter username
+        # perform login
         try:
             username_field = wait.until(EC.presence_of_element_located((
                 AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().className("android.widget.EditText").instance(0)'
             )))
             username_field.clear()
-            username_field.send_keys(username)
+            username_field.send_keys(user)
         except Exception as e:
-            sheet.cell(row=row, column=3).value = "failed"
+            sheet.cell(row=row, column = 6 ).value = "failed"
             continue
 
         # Enter password
@@ -126,12 +210,11 @@ def test_login_from_excel(driver, sheet):
                 AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().className("android.widget.EditText").instance(1)'
             )))
             password_field.clear()
-            password_field.send_keys(password)
+            password_field.send_keys(pwd)
         except Exception as e:
-            sheet.cell(row=row, column=3).value = "failed"
+            sheet.cell(row=row, column =6 ).value = "failed"
             continue
 
-        # press on login button
         try:
             login_btn = wait.until(EC.element_to_be_clickable((AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().description("Нэвтрэх")')))
             login_btn.click()
@@ -139,19 +222,26 @@ def test_login_from_excel(driver, sheet):
             print("Login button click failed.")
 
         time.sleep(2)
-        if is_logged_in(driver):
-            sheet.cell(row=row, column=3).value = "passed"
-            logout(driver)
+
+        if not is_logged_in(driver):
+            sheet.cell(row=row, column=6).value = "login failed"
+            row += 1
+            driver.terminate_app(APP_PACKAGE)
+            time.sleep(1)
+            driver.activate_app(APP_PACKAGE)
+            time.sleep(1)
+            continue
+
+        # perform transaction
+        if transaction(driver, bank, acc, amt, pin, accnf):
+            sheet.cell(row=row, column=7).value = "transfer passed"
         else:
-            sheet.cell(row=row, column=3).value = "failed"
+            sheet.cell(row=row, column=7).value = "transfer failed"
 
-        row += 1 
-        
-        # Reset app for next test
+        # prepare for next iteration
+        logout(driver)
         driver.terminate_app(APP_PACKAGE)
-        time.sleep(2)
+        time.sleep(1)
         driver.activate_app(APP_PACKAGE)
-        time.sleep(2)
-
-
-
+        time.sleep(1)
+        row += 1
